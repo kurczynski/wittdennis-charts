@@ -11,10 +11,10 @@ homeAssistantOtbr:
   rcpType: network
   # -- The mount path for the thread receiver (used when rcpType is 'serial')
   rcpMountPath: /dev/ttyUSB0
-  # -- Network URL for the Thread router (used when rcpType is 'network', format: host:port, e.g., 192.168.1.100:6638)
-  rcpNetworkUrl: "iot-gateways.local.kurczynski.org:7638"
+  # -- Network URL for the Thread router (used when rcpType is 'network', format: host:port, e.g., 192.168.1.100:8638)
+  rcpNetworkUrl: "some-host:7638"
   # -- The physical network interface to use for routing
-  backboneInterface: eno1np0
+  backboneInterface: eth0
   # -- Toggles flow control
   flowControl: true
   # -- If iptables firewall should be configured
