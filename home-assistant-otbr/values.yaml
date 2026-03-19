@@ -2,12 +2,19 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# -- Enable debug mode (keeps container running for troubleshooting)
+debugMode: false
+
 # -- OpenThread Border Router settings
 homeAssistantOtbr:
-  # -- The mount path for the thread receiver
+  # -- RCP connection type: 'serial' for USB devices, 'network' for network-based Thread routers (e.g., SLZB-MR3)
+  rcpType: network
+  # -- The mount path for the thread receiver (used when rcpType is 'serial')
   rcpMountPath: /dev/ttyUSB0
+  # -- Network URL for the Thread router (used when rcpType is 'network', format: host:port, e.g., 192.168.1.100:6638)
+  rcpNetworkUrl: "iot-gateways.local.kurczynski.org:7638"
   # -- The physical network interface to use for routing
-  backboneInterface: eth0
+  backboneInterface: eno1np0
   # -- Toggles flow control
   flowControl: true
   # -- If iptables firewall should be configured
@@ -194,10 +201,18 @@ livenessProbe:
   httpGet:
     path: /
     port: web
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 readinessProbe:
   httpGet:
     path: /
     port: web
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
 
 # Additional volumes on the output Deployment definition.
 volumes: []

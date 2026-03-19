@@ -23,51 +23,88 @@ spec:
         {{- end }}
     spec:
       hostname: {{ include "home-assistant-otbr.fullname" . }}
+      {{- if or (eq .Values.homeAssistantOtbr.rcpType "serial") (eq .Values.homeAssistantOtbr.rcpType "network") }}
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "home-assistant-otbr.serviceAccountName" . }}
+      {{- if or (eq .Values.homeAssistantOtbr.rcpType "serial") (eq .Values.homeAssistantOtbr.rcpType "network") }}
       securityContext:
         runAsUser: 0
         runAsGroup: 0
         runAsNonRoot: false
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- if or (eq .Values.homeAssistantOtbr.rcpType "serial") (eq .Values.homeAssistantOtbr.rcpType "network") }}
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
             runAsGroup: 0
             privileged: true
+          {{- end }}
           image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.debugMode }}
+          command: ["/bin/sh"]
+          args: ["-c", "sleep infinity"]
+          {{- end }}
           env:
+            {{- if eq .Values.homeAssistantOtbr.rcpType "network" }}
+            - name: NETWORK_DEVICE
+              value: {{ .Values.homeAssistantOtbr.rcpNetworkUrl | quote }}
+            - name: DEVICE
+              value: /tmp/ttyOTBR
+            - name: BAUDRATE
+              value: "115200"
+            - name: FLOW_CONTROL
+              value: "0"
+            - name: SKIP_MIGRATION
+              value: "1"
+            {{- else }}
             - name: DEVICE
               value: /dev/ttyUSB0
-            - name: BACKBONE_IF
-              value: {{ .Values.homeAssistantOtbr.backboneInterface | quote }}
-            - name: FLOW_CONTROL
-              value: {{ ternary "1" "0" .Values.homeAssistantOtbr.flowControl | quote }}
-            - name: FIREWALL
-              value: {{ ternary "1" "0" .Values.homeAssistantOtbr.firewall | quote }}
-            - name: NAT64
-              value: {{ ternary "1" "0" .Values.homeAssistantOtbr.nat64 | quote }}
             - name: BAUDRATE
               value: {{ .Values.homeAssistantOtbr.baudrate | quote }}
+            - name: FLOW_CONTROL
+              value: {{ ternary "1" "0" .Values.homeAssistantOtbr.flowControl | quote }}
+            {{- end }}
+            - name: BACKBONE_IF
+              value: {{ .Values.homeAssistantOtbr.backboneInterface | quote }}
+            - name: FIREWALL
+              {{- if eq .Values.homeAssistantOtbr.rcpType "serial" }}
+              value: {{ ternary "1" "0" .Values.homeAssistantOtbr.firewall | quote }}
+              {{- else }}
+              value: "0"
+              {{- end }}
+            - name: NAT64
+              value: {{ ternary "1" "0" .Values.homeAssistantOtbr.nat64 | quote }}
             - name: OTBR_REST_PORT
               value: {{ .Values.homeAssistantOtbr.restPort | quote }}
             - name: OTBR_WEB_PORT
               value: {{ .Values.homeAssistantOtbr.webPort | quote }}
+            {{- if eq .Values.homeAssistantOtbr.rcpType "network" }}
+            - name: SKIP_OTBR_MIGRATION
+              value: "1"
+            {{- end }}
           ports:
             - name: rest
               containerPort: {{ .Values.homeAssistantOtbr.restPort }}
               protocol: TCP
+              {{- if eq .Values.homeAssistantOtbr.rcpType "serial" }}
+              hostPort: {{ .Values.homeAssistantOtbr.restPort }}
+              {{- end }}
             - name: web
               containerPort: {{ .Values.homeAssistantOtbr.webPort }}
               protocol: TCP
+              {{- if eq .Values.homeAssistantOtbr.rcpType "serial" }}
+              hostPort: {{ .Values.homeAssistantOtbr.webPort }}
+              {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -81,17 +118,42 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
+            {{- if eq .Values.homeAssistantOtbr.rcpType "serial" }}
             - name: rcp
               mountPath: /dev/ttyUSB0
+            {{- end }}
+            {{- if eq .Values.homeAssistantOtbr.rcpType "network" }}
+            - name: otbr-network-script
+              mountPath: /etc/s6-overlay/s6-rc.d/otbr-agent/run
+              subPath: run
+            - name: otbr-socat-script
+              mountPath: /etc/s6-overlay/s6-rc.d/socat-otbr-tcp/run
+              subPath: run
+            - name: otbr-network-script
+              mountPath: /etc/s6-overlay/s6-rc.d/otbr-agent/dependencies.d/socat-otbr-tcp
+              subPath: dependency
+            {{- end }}
             - name: data
               mountPath: /data/thread
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
+        {{- if eq .Values.homeAssistantOtbr.rcpType "serial" }}
         - name: rcp
           hostPath:
             path: {{ .Values.homeAssistantOtbr.rcpMountPath }}
+        {{- end }}
+        {{- if eq .Values.homeAssistantOtbr.rcpType "network" }}
+        - name: otbr-network-script
+          configMap:
+            name: {{ include "home-assistant-otbr.fullname" . }}-network-script
+            defaultMode: 0755
+        - name: otbr-socat-script
+          configMap:
+            name: {{ include "home-assistant-otbr.fullname" . }}-socat-script
+            defaultMode: 0755
+        {{- end }}
         - name: data
         {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
